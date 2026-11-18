@@ -80,6 +80,14 @@
   .cell.empty .place{color:var(--muted);font-size:13px;font-weight:400}
   .cell.filled{background:linear-gradient(145deg,#ffe9f1,#ffd3e3)}
   .cell.filled .icon{color:var(--pink-500)}
+  .cell.visited{background:linear-gradient(145deg,#fff1d9,#ffd9c7)}
+  .cell .stamp{
+    position:absolute;top:7px;right:7px;width:26px;height:26px;border-radius:50%;
+    background:linear-gradient(145deg,var(--pink-400),var(--rose));color:#fff;font-size:14px;
+    display:flex;align-items:center;justify-content:center;box-shadow:0 4px 10px -4px rgba(201,61,110,.8);
+    transform:rotate(-12deg)
+  }
+  .cell .date{font-size:11px;color:var(--rose);background:rgba(255,255,255,.7);border-radius:999px;padding:2px 8px;margin-top:2px}
   .cell.saving{animation:pulse 1s ease-in-out infinite}
   @keyframes pulse{50%{opacity:.6}}
   .cell.pop .icon{animation:pop .5s ease}
@@ -123,6 +131,20 @@
     border:2px solid var(--pink-200);background:var(--pink-50);outline:none;transition:border-color .2s, box-shadow .2s
   }
   .modal input:focus{border-color:var(--pink-400);box-shadow:0 0 0 4px rgba(247,119,163,.2)}
+  .visit{margin-top:14px;padding:12px 14px;border-radius:16px;background:var(--pink-50);border:2px dashed var(--pink-200)}
+  .visit label.chk{display:flex;align-items:center;gap:10px;cursor:pointer;font-size:15px;user-select:none}
+  .visit input[type=checkbox]{appearance:none;-webkit-appearance:none;width:24px;height:24px;margin:0;flex:0 0 auto;
+    border-radius:8px;border:2px solid var(--pink-300);background:#fff;cursor:pointer;display:grid;place-content:center;
+    padding:0;transition:background .2s,border-color .2s}
+  .visit input[type=checkbox]::after{content:"♥";color:#fff;font-size:13px;transform:scale(0);transition:transform .2s}
+  .visit input[type=checkbox]:checked{background:var(--pink-500);border-color:var(--pink-500)}
+  .visit input[type=checkbox]:checked::after{transform:scale(1)}
+  .visit input[type=checkbox]:disabled{opacity:.4;cursor:not-allowed}
+  .visit .dateRow{display:none;align-items:center;gap:8px;margin-top:10px}
+  .visit.on .dateRow{display:flex}
+  .visit .dateRow span{font-size:13px;color:var(--muted);white-space:nowrap}
+  .visit .dateRow input{padding:9px 12px;font-size:15px;border-radius:12px;background:#fff}
+  .visit .disabledHint{font-size:12px;color:var(--muted);margin:6px 0 0 34px}
   .meta{font-size:12px;color:var(--muted);margin-top:8px;min-height:16px;text-align:right}
   .actions{display:flex;gap:10px;margin-top:16px}
   .btn{
@@ -155,7 +177,7 @@
   <header>
     <p class="script">our little love map</p>
     <h1>我們的戀愛九宮格 <span class="h">💗</span></h1>
-    <p class="sub">點一格，寫下想一起去的地方</p>
+    <p class="sub">點一格，寫下想一起去的地方，去過了就打個勾 ♥</p>
   </header>
 
   <section class="card">
@@ -173,6 +195,14 @@
     <h2 id="mTitle">第 1 格</h2>
     <p class="hint">想和你一起去哪裡呢？</p>
     <input id="placeInput" maxlength="60" placeholder="例如：淡水漁人碼頭看夕陽">
+    <div class="visit" id="visitBox">
+      <label class="chk"><input type="checkbox" id="visitedInput"> 我們去過了！</label>
+      <div class="dateRow">
+        <span>日期（選填）</span>
+        <input type="date" id="dateInput">
+      </div>
+      <div class="disabledHint" id="visitHint">先填地點才能打勾喔</div>
+    </div>
     <div class="meta" id="meta"></div>
     <div class="err" id="mErr"></div>
     <div class="actions">
@@ -191,7 +221,8 @@
   const SCRIPT_URL = (window.LOVE_GRID_CONFIG && window.LOVE_GRID_CONFIG.SCRIPT_URL) || "";
   const ICONS = ["🌸","🎡","☕","🌅","🍰","🎠","🌙","🏖️","💐"];
 
-  const state = { cells: Array.from({length:9}, () => ({place:"", updated:""})), editing:-1, busy:false };
+  const blank = () => ({place:"", updated:"", visited:false, date:""});
+  const state = { cells: Array.from({length:9}, blank), editing:-1, busy:false };
   const $ = id => document.getElementById(id);
   const grid = $("grid");
 
@@ -214,14 +245,20 @@
     grid.innerHTML = "";
     state.cells.forEach((c, i) => {
       const b = document.createElement("button");
-      b.className = "cell " + (c.place ? "filled" : "empty");
+      b.className = "cell " + (c.place ? "filled" : "empty") + (c.place && c.visited ? " visited" : "");
       b.type = "button";
       b.dataset.i = i;
-      b.setAttribute("aria-label", c.place ? `第 ${i+1} 格：${c.place}，點擊修改` : `第 ${i+1} 格，尚未填寫，點擊新增`);
+      const v = c.place && c.visited;
+      b.setAttribute("aria-label", c.place
+        ? `第 ${i+1} 格：${c.place}${v ? "，已去過" + (c.date ? "（" + c.date + "）" : "") : ""}，點擊修改`
+        : `第 ${i+1} 格，尚未填寫，點擊新增`);
       b.innerHTML = `<span class="num">${i+1}</span>
+        ${v ? '<span class="stamp" aria-hidden="true">✓</span>' : ""}
         <span class="icon">${c.place ? ICONS[i] : "+"}</span>
-        <span class="place"></span>`;
+        <span class="place"></span>
+        ${v && c.date ? '<span class="date"></span>' : ""}`;
       b.querySelector(".place").textContent = c.place || "點我填地點";
+      if (v && c.date) b.querySelector(".date").textContent = c.date.replace(/-/g, "/");
       b.addEventListener("click", () => openModal(i));
       grid.appendChild(b);
     });
@@ -240,6 +277,12 @@
     }
   }
 
+  function summary(){
+    const filled = state.cells.filter(c => c.place).length;
+    const visited = state.cells.filter(c => c.place && c.visited).length;
+    return `填了 ${filled}/9 格 · 去過 ${visited} 個 💕`;
+  }
+
   function nowStr(){
     const d = new Date(), p = n => String(n).padStart(2,"0");
     return `${d.getFullYear()}/${p(d.getMonth()+1)}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
@@ -255,41 +298,60 @@
       const r = await fetch(SCRIPT_URL + "?action=list&t=" + Date.now());
       const data = await r.json();
       if (!data.ok) throw new Error(data.error || "讀取失敗");
-      const cells = Array.from({length:9}, () => ({place:"", updated:""}));
-      (data.cells || []).forEach((c, idx) => { if (idx < 9) cells[idx] = { place: c.place || "", updated: c.updated || "" }; });
+      const cells = Array.from({length:9}, blank);
+      (data.cells || []).forEach((c, idx) => { if (idx < 9) cells[idx] = {
+        place: c.place || "", updated: c.updated || "", visited: !!c.visited, date: c.date || "" }; });
       state.cells = cells;
       render();
-      const filled = cells.filter(c => c.place).length;
-      setStatus(`已同步 · 填了 ${filled}/9 格`, "ok", { label:"重新整理", fn: load });
+      setStatus(`已同步 · ${summary()}`, "ok", { label:"重新整理", fn: load });
     }catch(e){
       setStatus("讀取 Google Sheets 失敗：" + (e.message || e), "err", { label:"再試一次", fn: load });
     }
   }
 
-  async function save(i, place){
+  async function save(i, place, visited, date){
     // text/plain 避免 CORS 預檢，Apps Script 直接接受
     const r = await fetch(SCRIPT_URL, {
       method: "POST",
       headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify({ action: "save", index: i + 1, place })
+      body: JSON.stringify({ action: "save", index: i + 1, place, visited, date })
     });
     const data = await r.json();
     if (!data.ok) throw new Error(data.error || "儲存失敗");
-    state.cells[i] = { place: data.place, updated: data.updated };
+    state.cells[i] = { place: data.place, updated: data.updated, visited: !!data.visited, date: data.date || "" };
   }
 
   /* ---------- modal ---------- */
   const backdrop = $("backdrop"), input = $("placeInput");
+  const visitedInput = $("visitedInput"), dateInput = $("dateInput"), visitBox = $("visitBox");
+  function syncVisitUI(){
+    const hasPlace = !!input.value.trim();
+    visitedInput.disabled = state.busy || !hasPlace;
+    if (!hasPlace) visitedInput.checked = false;
+    $("visitHint").style.display = hasPlace ? "none" : "";
+    visitBox.classList.toggle("on", visitedInput.checked);
+  }
+  input.addEventListener("input", syncVisitUI);
+  visitedInput.addEventListener("change", () => {
+    if (visitedInput.checked && !dateInput.value){
+      const d = new Date(), p = n => String(n).padStart(2,"0");
+      dateInput.value = `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
+    }
+    syncVisitUI();
+  });
   function openModal(i){
     if (!SCRIPT_URL || SCRIPT_URL.startsWith("貼上")){ setStatus("尚未設定 SCRIPT_URL，無法儲存", "err"); return; }
     state.editing = i;
     const c = state.cells[i];
     $("mTitle").textContent = `第 ${i+1} 格 ${ICONS[i]}`;
     input.value = c.place;
+    visitedInput.checked = !!(c.place && c.visited);
+    dateInput.value = c.date || "";
     $("meta").textContent = c.updated ? `上次更新：${c.updated}` : "";
     $("mErr").textContent = "";
     $("clearBtn").style.display = c.place ? "" : "none";
     setBusy(false);
+    syncVisitUI();
     backdrop.classList.add("open");
     setTimeout(() => input.focus(), 50);
   }
@@ -297,22 +359,25 @@
   function setBusy(b){
     state.busy = b;
     ["saveBtn","cancelBtn","clearBtn"].forEach(id => $(id).disabled = b);
-    input.disabled = b;
+    input.disabled = b; dateInput.disabled = b; visitedInput.disabled = b || !input.value.trim();
     $("saveBtn").textContent = b ? "儲存中…" : "儲存 ♥";
   }
 
-  async function commit(value){
+  async function commit(value, visited, date){
     const i = state.editing; if (i < 0 || state.busy) return;
-    if (value === state.cells[i].place){ closeModal(); return; }
+    if (!value){ visited = false; date = ""; }
+    if (!visited) date = "";
+    const cur = state.cells[i];
+    if (value === cur.place && visited === !!cur.visited && date === (cur.date || "")){ closeModal(); return; }
+    const newlyVisited = visited && !cur.visited;
     setBusy(true);
     const cellEl = grid.children[i]; cellEl && cellEl.classList.add("saving");
     try{
-      await save(i, value);
+      await save(i, value, visited, date);
       closeModal(); render();
       const el = grid.children[i];
-      if (value){ el.classList.add("pop"); burst(el); }
-      const filled = state.cells.filter(c => c.place).length;
-      setStatus(`已儲存到 Google Sheets · 填了 ${filled}/9 格`, "ok", { label:"重新整理", fn: load });
+      if (value){ el.classList.add("pop"); burst(el, newlyVisited); }
+      setStatus(`已儲存到 Google Sheets · ${summary()}`, "ok", { label:"重新整理", fn: load });
     }catch(e){
       cellEl && cellEl.classList.remove("saving");
       setBusy(false);
@@ -320,19 +385,20 @@
     }
   }
 
-  $("form").addEventListener("submit", ev => { ev.preventDefault(); commit(input.value.trim()); });
-  $("clearBtn").addEventListener("click", () => commit(""));
+  $("form").addEventListener("submit", ev => { ev.preventDefault(); commit(input.value.trim(), visitedInput.checked, dateInput.value); });
+  $("clearBtn").addEventListener("click", () => commit("", false, ""));
   $("cancelBtn").addEventListener("click", closeModal);
   backdrop.addEventListener("click", ev => { if (ev.target === backdrop && !state.busy) closeModal(); });
   document.addEventListener("keydown", ev => { if (ev.key === "Escape" && backdrop.classList.contains("open") && !state.busy) closeModal(); });
 
-  function burst(el){
+  function burst(el, big){
     const r = el.getBoundingClientRect();
     const cx = r.left + r.width/2, cy = r.top + r.height/2;
-    for (let k=0;k<10;k++){
+    const n = big ? 18 : 10;
+    for (let k=0;k<n;k++){
       const s = document.createElement("span");
-      s.className = "burst"; s.textContent = k%2 ? "♥" : "✦";
-      const a = (Math.PI*2*k)/10, d = 50 + Math.random()*30;
+      s.className = "burst"; s.textContent = big ? (k%3 ? "♥" : "💕") : (k%2 ? "♥" : "✦");
+      const a = (Math.PI*2*k)/n, d = (big ? 70 : 50) + Math.random()*30;
       s.style.left = cx + "px"; s.style.top = cy + "px";
       s.style.setProperty("--dx", Math.cos(a)*d + "px");
       s.style.setProperty("--dy", Math.sin(a)*d + "px");
